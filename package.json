@@ -1,0 +1,52 @@
+{
+  "name": "dream-globe",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A drop-in interactive 3D night-Earth globe for marking locations, with instanced glowing markers, great-circle arcs and quaternion flyTo.",
+  "license": "MIT",
+  "keywords": [
+    "globe",
+    "3d",
+    "threejs",
+    "webgl",
+    "map",
+    "visualization",
+    "great-circle",
+    "data-visualization"
+  ],
+  "main": "dist/dream-globe.es.js",
+  "module": "dist/dream-globe.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/dream-globe.es.js",
+      "default": "./dist/dream-globe.iife.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build:es && npm run build:global",
+    "build:es": "vite build",
+    "build:global": "cross-env BUILD_TARGET=global vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.13.0",
+    "three": "^0.169.0",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
