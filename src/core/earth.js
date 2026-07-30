@@ -7,6 +7,7 @@ import {
   MeshStandardMaterial,
   ShaderMaterial,
   SphereGeometry,
+  Vector2,
 } from 'three'
 
 export const GLOBE_RADIUS = 1
@@ -71,10 +72,12 @@ export function createAtmosphere({
       uIntensity: { value: 1.5 },
       uRadius: { value: radius },
       uScale: { value: scale },
+      uResolution: { value: new Vector2(1, 1) },
     },
     vertexShader: /* glsl */ `
       uniform float uRadius;
       uniform float uScale;
+      uniform vec2 uResolution;
 
       varying float vRadial;
 
@@ -99,11 +102,24 @@ export function createAtmosphere({
         vec4 limbClip = projectionMatrix * (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)
           + vec4(uRadius, 0.0, 0.0, 0.0));
 
+        // NDC is not isotropic: x and y each span -1..1 regardless of the
+        // viewport's aspect ratio, so one NDC unit is a different number of
+        // pixels horizontally than vertically. The limb offset below is
+        // measured along x only, so comparing a two-dimensional NDC length
+        // against it silently stretches the falloff on whichever axis is
+        // longer. On a portrait viewport (aspect 0.91) that pushed the fade
+        // outwards vertically and the shell rendered as a thick saturated
+        // band; on the landscape viewport used to tune it, the error ran the
+        // other way and got absorbed into uIntensity. Scaling y by the aspect
+        // ratio converts both into the same isotropic screen-space units.
+        float aspect = uResolution.x / max(uResolution.y, 1e-6);
         vec2 centreNdc = centreClip.xy / centreClip.w;
         float limbNdc = abs(limbClip.x / limbClip.w - centreNdc.x);
         float outerNdc = limbNdc * uScale;
 
-        float here = length(clipPosition.xy / clipPosition.w - centreNdc);
+        vec2 offsetNdc = clipPosition.xy / clipPosition.w - centreNdc;
+        offsetNdc.y /= aspect;
+        float here = length(offsetNdc);
         vRadial = (here - limbNdc) / max(outerNdc - limbNdc, 1e-6);
 
         gl_Position = clipPosition;

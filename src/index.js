@@ -290,6 +290,14 @@ export class DreamGlobe {
     // the browser lays it out at its backing-buffer size, so on any DPR above
     // 1 the canvas overflows its container and the globe gets cropped.
     this.renderer.setSize(width, height)
+
+    // The atmosphere's falloff is measured in isotropic screen space, so it
+    // needs the viewport shape. Without this the rim thickens on portrait
+    // viewports and reads as a solid blue band instead of a haze.
+    const atmosphereUniforms = this.atmosphere?.material?.uniforms
+    if (atmosphereUniforms?.uResolution) {
+      atmosphereUniforms.uResolution.value.set(width, height)
+    }
   }
 
   _tick() {

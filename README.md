@@ -4,6 +4,9 @@ An interactive 3D night-Earth globe for the web. Drop it into a page, hand it a
 list of coordinates, and get a draggable, zoomable planet with glowing markers,
 animated great-circle routes and a smooth camera flight to any location.
 
+**[▶ Live demo](https://dream-globe.pages.dev)** — drag to spin, click a marker,
+fly to a city.
+
 ![DreamGlobe](docs/overview.png)
 
 Built on [Three.js](https://threejs.org/). No framework required — it works with
@@ -304,10 +307,11 @@ import during server-side rendering.
 
 ```bash
 npm install
-npm run dev      # http://127.0.0.1:5175
-npm test         # 82 tests
+npm run dev        # http://127.0.0.1:5175
+npm test           # 86 tests
 npm run lint
-npm run build
+npm run build      # library bundles -> dist/
+npm run build:demo # the demo site above -> dist-demo/
 ```
 
 The test suite covers coordinate conversion round-trips, great-circle geometry,

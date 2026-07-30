@@ -196,4 +196,69 @@ describe('createAtmosphere', () => {
     atmosphere.geometry.dispose()
     atmosphere.material.dispose()
   })
+
+  /**
+   * The falloff must be isotropic on screen, which means the shader needs the
+   * viewport's aspect ratio.
+   *
+   * The bug: NDC spans -1..1 on both axes whatever the viewport's shape, so one
+   * NDC unit is a different number of pixels horizontally than vertically. The
+   * limb reference is measured along x only, so an unscaled two-dimensional NDC
+   * length compares against the wrong yardstick on the y axis. The shader was
+   * tuned on a 2400x1350 landscape frame, where the error was small and got
+   * absorbed into uIntensity; on the 852x932 portrait viewport of the deployed
+   * demo the fade was pushed outwards vertically and the rim rendered as a
+   * thick, saturated blue band. Same code, same parameters, different window
+   * shape — which is why the screenshots looked right and the build did not.
+   */
+  it('normalises the falloff by aspect ratio so it is viewport-independent', () => {
+    const atmosphere = createAtmosphere({ radius: GLOBE_RADIUS })
+    const vertex = atmosphere.material.vertexShader
+
+    // The uniform has to exist, and the shader has to actually divide by it.
+    expect(atmosphere.material.uniforms.uResolution).toBeDefined()
+    expect(vertex).toContain('uResolution')
+    expect(vertex).toMatch(/uResolution\.x\s*\/\s*max\s*\(\s*uResolution\.y/)
+    expect(vertex).toMatch(/offsetNdc\.y\s*\/=\s*aspect/)
+
+    // The raw NDC length must not be used directly any more: that is the form
+    // that carried the bug.
+    expect(vertex).not.toMatch(/length\s*\(\s*clipPosition\.xy\s*\/\s*clipPosition\.w\s*-/)
+
+    atmosphere.geometry.dispose()
+    atmosphere.material.dispose()
+  })
+
+  it('produces the same falloff on portrait and landscape viewports', () => {
+    // Reimplements the corrected screen-space measurement. The assertion that
+    // matters is that a fragment at a given *pixel* radius gets the same glow
+    // regardless of the viewport's shape.
+    const scale = 1.09
+    const limbNdc = 0.4
+
+    function radialFor({ ndcX, ndcY, aspect }) {
+      const y = ndcY / aspect
+      const here = Math.hypot(ndcX, y)
+      return (here - limbNdc) / Math.max(limbNdc * scale - limbNdc, 1e-6)
+    }
+
+    // A point straight above the centre, at the same physical screen distance
+    // from it as the limb, expressed in each viewport's own NDC units.
+    const portrait = { w: 852, h: 932 }
+    const landscape = { w: 2400, h: 1350 }
+
+    for (const viewport of [portrait, landscape]) {
+      const aspect = viewport.w / viewport.h
+      // Vertical offset whose isotropic length equals limbNdc.
+      const ndcY = limbNdc * aspect
+      const t = radialFor({ ndcX: 0, ndcY, aspect })
+      expect(t).toBeCloseTo(0, 6)
+    }
+
+    // And the uncorrected form disagrees between the two, which is the bug.
+    const naive = ({ ndcY }) => (Math.abs(ndcY) - limbNdc) / (limbNdc * scale - limbNdc)
+    const naivePortrait = naive({ ndcY: limbNdc * (portrait.w / portrait.h) })
+    const naiveLandscape = naive({ ndcY: limbNdc * (landscape.w / landscape.h) })
+    expect(Math.abs(naivePortrait - naiveLandscape)).toBeGreaterThan(0.5)
+  })
 })

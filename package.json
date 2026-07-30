@@ -36,6 +36,7 @@
     "build": "npm run build:es && npm run build:global",
     "build:es": "vite build",
     "build:global": "cross-env BUILD_TARGET=global vite build",
+    "build:demo": "cross-env BUILD_TARGET=demo vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint ."
