@@ -4,6 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>DreamGlobe — Interactive 3D Night Earth</title>
+  <meta name="description" content="A drop-in 3D night-Earth globe for the web. Instanced glowing markers, animated great-circle arcs, quaternion flyTo and a custom GLSL atmosphere shader — 1,000 markers and 200 arcs in 4 draw calls." />
+
+  <!--
+    Without these, anything that unfurls a link to this page has nothing to go
+    on and falls back to the bare hostname. Upwork's portfolio link cards were
+    showing "dream-globe.pages.dev" as the headline; the same applies to
+    Twitter, Slack, Discord and LinkedIn previews.
+
+    og:image must be an absolute URL — scrapers do not resolve relative paths
+    against the page they came from.
+  -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://dream-globe.pages.dev/" />
+  <meta property="og:site_name" content="DreamGlobe" />
+  <meta property="og:title" content="DreamGlobe — Interactive 3D Night Earth" />
+  <meta property="og:description" content="Drag to spin, click a marker, fly to a city. 1,000 markers and 200 arcs in 4 draw calls — built from scratch on Three.js." />
+  <meta property="og:image" content="https://dream-globe.pages.dev/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="A night-side Earth with glowing city lights and cyan great-circle flight routes arcing across the globe." />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="DreamGlobe — Interactive 3D Night Earth" />
+  <meta name="twitter:description" content="Drag to spin, click a marker, fly to a city. 1,000 markers and 200 arcs in 4 draw calls — built from scratch on Three.js." />
+  <meta name="twitter:image" content="https://dream-globe.pages.dev/og-image.jpg" />
   <style>
     :root {
       --bg: #04060d;
