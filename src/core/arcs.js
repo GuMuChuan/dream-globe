@@ -31,12 +31,14 @@ const MAX_SEGMENTS = 128
  * Hard ceiling on how far an arc may rise above the surface, as a fraction of
  * the globe radius.
  *
- * GlobeControls lets the camera come in to 1.35 radii. An arc that peaks above
- * that passes through the viewer when zoomed all the way in, which looks like
- * a rendering fault rather than a design choice. 0.28 leaves clear air even for
- * an antipodal route, where the lift term is at its maximum.
+ * Two limits meet here. GlobeControls lets the camera come in to 1.35 radii,
+ * so anything peaking above that passes through the viewer when zoomed all the
+ * way in. But the tighter constraint is visual: at 0.28 the long routes stand
+ * so far off the limb that, on a globe carrying a dozen of them, their peaks
+ * line up into what reads as a drawn ring around the planet. 0.16 keeps a
+ * transpacific arc clearly airborne while holding it against the disc.
  */
-const MAX_LIFT = 0.28
+const MAX_LIFT = 0.16
 
 export class ArcLayer {
   /**

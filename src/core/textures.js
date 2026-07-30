@@ -106,11 +106,16 @@ export function createPlaceholderTexture({ width = 2048, height = 1024, seed = 2
   }
 
   // City lights: dense clusters plus scattered singles, warm white to amber.
-  for (let cluster = 0; cluster < 140; cluster++) {
+  //
+  // Cluster count is tuned against a 2400 px render, not the 850 px one used
+  // during development. At 140 clusters the globe looked convincing small and
+  // conspicuously empty large — whole continents with nothing on them. Detail
+  // that only appears under magnification still has to be there.
+  for (let cluster = 0; cluster < 320; cluster++) {
     const cx = random() * width
     const cy = height * (0.15 + random() * 0.7)
     const spread = (0.004 + random() * 0.03) * width
-    const count = 8 + Math.floor(random() * 70)
+    const count = 10 + Math.floor(random() * 80)
 
     // Pre-generate the cluster so every wrapped copy is identical. Calling the
     // PRNG inside the wrap callback would give the two halves different dots
@@ -137,6 +142,23 @@ export function createPlaceholderTexture({ width = 2048, height = 1024, seed = 2
         ctx.fill()
       }
     })
+  }
+
+  // Scattered isolated lights between the clusters — the small towns and
+  // coastal roads that keep the dark areas from reading as empty ocean. They
+  // are what makes the difference between "a few glowing blobs" and "an
+  // inhabited planet" once the texture is seen at full resolution.
+  const strayCount = Math.round((width * height) / 5200)
+  for (let i = 0; i < strayCount; i++) {
+    const x = random() * width
+    const y = height * (0.12 + random() * 0.76)
+    const size = 0.4 + random() * 0.9
+    const warmth = 165 + Math.floor(random() * 75)
+    const alpha = 0.12 + random() * 0.3
+    ctx.fillStyle = `rgba(255, ${warmth + 20}, ${warmth - 40}, ${alpha})`
+    ctx.beginPath()
+    ctx.arc(x, y, size, 0, Math.PI * 2)
+    ctx.fill()
   }
   ctx.globalCompositeOperation = 'source-over'
 

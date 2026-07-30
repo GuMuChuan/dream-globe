@@ -60,7 +60,7 @@ export function createEarth({ texture, radius = GLOBE_RADIUS, segments = 96 } = 
  */
 export function createAtmosphere({
   radius = GLOBE_RADIUS,
-  scale = 1.09,
+  scale = 1.12,
   color = 0x4b8fd4,
 } = {}) {
   const geometry = new SphereGeometry(radius * scale, 64, 32)
@@ -68,46 +68,80 @@ export function createAtmosphere({
   const material = new ShaderMaterial({
     uniforms: {
       uColor: { value: new Color(color) },
-      uIntensity: { value: 0.6 },
+      uIntensity: { value: 1.5 },
       uRadius: { value: radius },
       uScale: { value: scale },
     },
     vertexShader: /* glsl */ `
-      varying vec3 vViewPosition;
-      varying vec3 vCentreView;
+      uniform float uRadius;
+      uniform float uScale;
+
+      varying float vRadial;
 
       void main() {
         vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-        vViewPosition = viewPosition.xyz;
-        // The globe centre in view space. Constant across the mesh, but
-        // deriving it here keeps the shader independent of any uniform the
-        // caller might forget to update when the globe is transformed.
-        vCentreView = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-        gl_Position = projectionMatrix * viewPosition;
+        vec4 clipPosition = projectionMatrix * viewPosition;
+
+        // The globe centre and a point exactly on the limb, both pushed through
+        // the same projection. Comparing this fragment against them in clip
+        // space gives a falloff parameter that is unambiguous: it is literally
+        // "how far across the visible ring is this pixel", measured on screen.
+        //
+        // The obvious alternatives both fail here, and both were tried. A
+        // Fresnel dot product does not converge at the shell's own silhouette,
+        // so the glow is still bright where the geometry runs out. And the
+        // fragment's distance to the camera-centre axis is not the same thing
+        // as its screen radius: BackSide renders the far wall of the shell,
+        // where perspective and grazing view angles make that distance run
+        // backwards — measured on a rendered scanline, brightness increased
+        // outwards and was cut off at full intensity by the mesh edge.
+        vec4 centreClip = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        vec4 limbClip = projectionMatrix * (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)
+          + vec4(uRadius, 0.0, 0.0, 0.0));
+
+        vec2 centreNdc = centreClip.xy / centreClip.w;
+        float limbNdc = abs(limbClip.x / limbClip.w - centreNdc.x);
+        float outerNdc = limbNdc * uScale;
+
+        float here = length(clipPosition.xy / clipPosition.w - centreNdc);
+        vRadial = (here - limbNdc) / max(outerNdc - limbNdc, 1e-6);
+
+        gl_Position = clipPosition;
       }
     `,
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
       uniform float uIntensity;
-      uniform float uRadius;
-      uniform float uScale;
 
-      varying vec3 vViewPosition;
-      varying vec3 vCentreView;
+      varying float vRadial;
 
       void main() {
-        // Perpendicular distance from the camera-to-centre axis: the impact
-        // parameter of this fragment's line of sight.
-        vec3 axis = normalize(vCentreView);
-        vec3 offset = vViewPosition - vCentreView;
-        float b = length(offset - axis * dot(offset, axis));
-
         // 0 at the planet's limb, 1 at the outer edge of the shell.
-        float t = clamp((b / uRadius - 1.0) / (uScale - 1.0), 0.0, 1.0);
+        float t = clamp(vRadial, 0.0, 1.0);
 
-        // Reaches exactly zero at t = 1, so the shell's silhouette contributes
-        // nothing and never shows up as an edge.
-        float glow = pow(1.0 - t, 3.0) * uIntensity;
+        // Two margins, and both are load-bearing.
+        //
+        // Inner: the glow must not be at full strength where it meets the
+        // planet. The shell's t = 0 ring and the Earth's silhouette do not land
+        // on the same pixel — measured on a 1200 px render, the globe's disc
+        // was 502 px and the shell's 570 px, and the innermost fully-bright
+        // fragments spilled about two pixels past the edge of the sphere that
+        // was supposed to hide them. That spill is a hard white line tracing
+        // the planet, which is the artefact that survived three earlier
+        // rewrites of this shader. Ramping up from 0.06 keeps the brightest
+        // fragments safely behind the globe.
+        //
+        // Outer: the glow has to die before the geometry does. Fading exactly
+        // to the shell edge leaves a small non-zero value on the outermost ring
+        // of fragments, and past that ring there is no mesh at all — so
+        // brightness drops to nothing across a single pixel and the shell's own
+        // silhouette shows up as a thin outline.
+        float t2 = clamp((t - 0.06) / (0.82 - 0.06), 0.0, 1.0);
+
+        // smoothstep, not pow: its derivative is zero at both ends, so the
+        // gradient never stops abruptly enough to read as a band.
+        float falloff = 1.0 - smoothstep(0.0, 1.0, t2);
+        float glow = falloff * falloff * uIntensity;
         gl_FragColor = vec4(uColor, glow);
       }
     `,

@@ -47,11 +47,44 @@ describe('createAtmosphere', () => {
    */
   it('drives falloff from distance, not from a Fresnel term', () => {
     const atmosphere = createAtmosphere({ radius: GLOBE_RADIUS })
-    const source = atmosphere.material.fragmentShader
+    const fragment = atmosphere.material.fragmentShader
+    const vertex = atmosphere.material.vertexShader
 
-    expect(source).not.toMatch(/dot\s*\(\s*normalize\s*\(\s*vNormal/)
-    expect(source).toContain('uRadius')
-    expect(source).toContain('uScale')
+    expect(fragment).not.toMatch(/dot\s*\(\s*normalize\s*\(\s*vNormal/)
+    expect(vertex).toContain('uRadius')
+    expect(vertex).toContain('uScale')
+
+    atmosphere.geometry.dispose()
+    atmosphere.material.dispose()
+  })
+
+  /**
+   * The falloff parameter is a screen-space radius, computed in clip space.
+   *
+   * Regression test for the third attempt at this shader. The shell renders
+   * BackSide, so every fragment sits on the far wall of the sphere, seen at a
+   * grazing angle. Neither the fragment's distance to the camera-centre axis
+   * nor the eye ray's closest approach to the centre tracks its screen radius
+   * there — measured on a rendered scanline, the resulting brightness ran
+   * *outwards* from the limb and was cut off at full intensity by the mesh
+   * edge, producing exactly the hard outline the falloff exists to prevent.
+   *
+   * Projecting the globe centre and a limb point through the same matrices and
+   * comparing in NDC sidesteps all of it: the parameter is then, by
+   * construction, "how far across the visible ring is this pixel".
+   */
+  it('measures screen radius in clip space, not a view-space distance', () => {
+    const atmosphere = createAtmosphere({ radius: GLOBE_RADIUS })
+    const vertex = atmosphere.material.vertexShader
+
+    // Centre and limb both projected, then compared after the perspective
+    // divide. The divide is the part that cannot be skipped.
+    expect(vertex).toMatch(/centreClip\.xy\s*\/\s*centreClip\.w/)
+    expect(vertex).toMatch(/clipPosition\.xy\s*\/\s*clipPosition\.w/)
+
+    // The rejected formulations must not come back.
+    expect(vertex).not.toMatch(/vViewPosition\s*-\s*vCentreView/)
+    expect(vertex).not.toMatch(/normalize\s*\(\s*vViewPosition\s*\)/)
 
     atmosphere.geometry.dispose()
     atmosphere.material.dispose()
@@ -64,16 +97,33 @@ describe('createAtmosphere', () => {
     const scale = 1.09
     const radius = 1
 
+    function smoothstep(edge0, edge1, x) {
+      const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+      return t * t * (3 - 2 * t)
+    }
+
     function glow(impactParameter) {
       const t = Math.min(1, Math.max(0, (impactParameter / radius - 1) / (scale - 1)))
-      return Math.pow(1 - t, 3)
+      const t2 = Math.min(1, Math.max(0, (t - 0.06) / (0.82 - 0.06)))
+      const falloff = 1 - smoothstep(0, 1, t2)
+      return falloff * falloff
     }
 
     expect(glow(radius * scale)).toBe(0)
     expect(glow(radius * scale * 1.5)).toBe(0)
 
+    // Zero is reached before the geometry ends, leaving transparent margin.
+    // That margin is the whole point: it is what stops the shell's silhouette
+    // from appearing as an outline around the planet.
+    expect(glow(radius + (scale - 1) * radius * 0.82)).toBe(0)
+    expect(glow(radius + (scale - 1) * radius * 0.7)).toBeGreaterThan(0)
+
     // And it has to actually be bright at the limb, or there is no glow at all.
     expect(glow(radius)).toBeCloseTo(1, 6)
+
+    // The peak is held flat across the inner margin, so the brightest fragments
+    // stay behind the globe rather than spilling past its silhouette.
+    expect(glow(radius + (scale - 1) * radius * 0.06)).toBeCloseTo(1, 6)
 
     // Monotonic decay in between — no ring, no plateau.
     let previous = Infinity
@@ -84,16 +134,55 @@ describe('createAtmosphere', () => {
     }
   })
 
+  it('lands on the shell edge with zero slope, not just zero value', () => {
+    // The bug this pins down: pow(1 - t, 3) reaches zero at the edge but its
+    // gradient does not, and the abrupt change in slope renders as a second
+    // faint ring outside the atmosphere. Only visible at high resolution,
+    // which is exactly where documentation screenshots get taken.
+    const scale = 1.09
+
+    function smoothstep(edge0, edge1, x) {
+      const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+      return t * t * (3 - 2 * t)
+    }
+
+    function glow(t) {
+      const clamped = Math.min(1, Math.max(0, t))
+      const t2 = Math.min(1, Math.max(0, (clamped - 0.06) / (0.82 - 0.06)))
+      const falloff = 1 - smoothstep(0, 1, t2)
+      return falloff * falloff
+    }
+
+    // Numerical slope just inside the outer edge must be essentially flat.
+    const h = 1e-4
+    const slopeAtEdge = Math.abs(glow(1 - h) - glow(1)) / h
+    expect(slopeAtEdge).toBeLessThan(0.01)
+
+    // For contrast, the rejected curve: pow(1 - t, 3) leaves a real slope.
+    const rejected = (t) => Math.pow(1 - Math.min(1, Math.max(0, t)), 3)
+    const rejectedSlope = Math.abs(rejected(1 - h) - rejected(1)) / h
+    expect(rejectedSlope).toBeGreaterThan(slopeAtEdge)
+
+    expect(scale).toBeGreaterThan(1)
+  })
+
   it('keeps the shell thin enough not to wash out the surface up close', () => {
     // The camera comes in to 1.35 radii. At scale 1.16 the haze occupied enough
-    // of the frame at that distance to sit visibly on top of the continents;
-    // intensity and thickness turned out to be coupled, so both are pinned.
+    // of the frame at that distance to sit visibly on top of the continents.
+    //
+    // Intensity is allowed to be well above 1 here because the two falloff
+    // margins spend most of it: the curve ramps in from t = 0.06 and is squared
+    // on the way out, so the peak only ever lands in the couple of pixels
+    // hidden behind the globe. Measured on a 1200 px render, an intensity of
+    // 0.6 left the entire visible annulus below the 8-bit quantisation floor —
+    // a glow that exists in the framebuffer and nowhere on screen.
     const atmosphere = createAtmosphere({ radius: GLOBE_RADIUS })
     const shellRadius = atmosphere.geometry.parameters.radius
 
     expect(shellRadius).toBeGreaterThan(GLOBE_RADIUS)
     expect(shellRadius).toBeLessThanOrEqual(GLOBE_RADIUS * 1.12)
-    expect(atmosphere.material.uniforms.uIntensity.value).toBeLessThanOrEqual(0.7)
+    expect(atmosphere.material.uniforms.uIntensity.value).toBeGreaterThan(1)
+    expect(atmosphere.material.uniforms.uIntensity.value).toBeLessThanOrEqual(2)
 
     atmosphere.geometry.dispose()
     atmosphere.material.dispose()
