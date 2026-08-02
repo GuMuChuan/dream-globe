@@ -7,6 +7,8 @@ animated great-circle routes and a smooth camera flight to any location.
 **[▶ Live demo](https://dream-globe.pages.dev)** — drag to spin, click a marker,
 fly to a city.
 
+> 📖 **How it works (Chinese):** [我把 Three.js 地球上的 1000 个标记压到了 4 次 draw call](https://juejin.cn/post/7669004391231537193) — a source-level walkthrough of the instancing, the shader billboarding, why picking can't use `Raycaster`, and the atmosphere shader that took four rewrites.
+
 ![DreamGlobe](docs/overview.png)
 
 Built on [Three.js](https://threejs.org/). No framework required — it works with
